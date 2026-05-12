@@ -46,6 +46,27 @@ def _wrap(handler: Callable[..., int]) -> Callable[..., int]:
 
 
 @_wrap
+def cmd_fetch_data(args: argparse.Namespace) -> int:
+    """Fetch OHLCV via onchainos market kline and write a parquet."""
+    from scripts import data_fetcher
+
+    try:
+        result = data_fetcher.fetch(
+            token=args.token,
+            chain=args.chain,
+            bar=args.bar,
+            start=args.start,
+            end=args.end,
+            symbol=args.symbol,
+            out=args.out,
+            force=args.force,
+        )
+    except data_fetcher.DataFetchError as e:
+        return _failed(str(e))
+    return _ok(result)
+
+
+@_wrap
 def cmd_pm_check(args: argparse.Namespace) -> int:
     """Smoke-check that the `pm` CLI is available + functional.
 
@@ -104,12 +125,12 @@ def build_parser() -> argparse.ArgumentParser:
     fd.add_argument("--token", required=True, help="Token contract address")
     fd.add_argument("--chain", default="solana", help="Chain (default: solana)")
     fd.add_argument("--bar", default="1D", help="Bar timeframe (default: 1D)")
-    fd.add_argument("--start", required=True, help="ISO 8601 start ts")
-    fd.add_argument("--end", required=True, help="ISO 8601 end ts")
+    fd.add_argument("--start", default=None, help="ISO 8601 lower bound (optional)")
+    fd.add_argument("--end", default=None, help="ISO 8601 upper bound (optional)")
     fd.add_argument("--symbol", default=None, help="Symbol label (default: derived from --token)")
     fd.add_argument("--out", default=None, help="Output parquet path (default: cache_dir/<symbol>-<bar>.parquet)")
     fd.add_argument("--force", action="store_true", help="Re-fetch even if cache exists")
-    fd.set_defaults(_handler=cmd_stub, _stub_name="fetch-data")
+    fd.set_defaults(_handler=cmd_fetch_data)
 
     # replay — M18
     rp = sub.add_parser(
