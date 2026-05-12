@@ -1,0 +1,25 @@
+schema_version: 1
+name: strategy-backtester
+version: "0.1.0"
+description: "OKX environment mock that drives portfolio-manager (v0.2.0+) through historical OHLCV. Agent and user iterate on a Python decide() strategy file; backtester replays bars one at a time, feeds synthesized wallet+pnl+market snapshots to PM exactly the way okx-wallet-portfolio + okx-dex-market would in live mode, captures fills back into the simulated wallet, then runs pm report at the end. Same strategy.py + rules.yaml work in live mode and backtest mode — one artifact, two execution contexts. Trigger phrases: backtest a strategy, replay history, what-if my strategy, simulate this strategy, sharpe of my strategy, fetch ohlcv, kline parquet cache, run my strategy on past data."
+author:
+  name: "Paulo Goncalves"
+  github: "paulomcg"
+license: MIT
+category: trading-strategy
+tags:
+  - solana
+  - onchainos
+  - backtest
+  - paper-trading
+  - strategy-validation
+  - sharpe
+  - portfolio-manager
+  - composes-with-pm
+
+components:
+  skill:
+    dir: .
+
+api_calls: []
+type: community-developer
