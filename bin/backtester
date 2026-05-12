@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# backtester — strategy-backtester CLI launcher.
+#
+# Resolves the repo root from this script's location, then invokes the
+# Python entry point. Honors $BACKTESTER_PYTHON to override the interpreter
+# (defaults to the venv at <repo>/.venv/bin/python if present, else python3).
+
+set -e
+
+here=$(cd "$(dirname "$0")" && pwd -P)
+root=$(cd "$here/.." && pwd -P)
+
+if [ -n "$BACKTESTER_PYTHON" ]; then
+  py="$BACKTESTER_PYTHON"
+elif [ -x "$root/.venv/bin/python" ]; then
+  py="$root/.venv/bin/python"
+else
+  py="$(command -v python3 || command -v python)"
+fi
+
+if [ -z "$py" ] || [ ! -x "$py" ]; then
+  echo "FAILED: internal_error backtester launcher: no python interpreter found" >&2
+  exit 1
+fi
+
+# Make `python -m scripts.backtester` work regardless of cwd.
+# `cd "$root"` ensures Python's implicit sys.path[0]='' (= cwd) doesn't
+# pick up some other directory's `scripts/` package and shadow ours.
+export PYTHONPATH="$root${PYTHONPATH:+:$PYTHONPATH}"
+cd "$root"
+
+exec "$py" -m scripts.backtester "$@"
