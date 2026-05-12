@@ -46,6 +46,28 @@ def _wrap(handler: Callable[..., int]) -> Callable[..., int]:
 
 
 @_wrap
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Replay an OHLCV parquet through PM, one cycle per bar; final pm report."""
+    from scripts import replay
+
+    try:
+        result = replay.run_replay(
+            ohlcv_path=args.ohlcv,
+            strategy_path=args.strategy,
+            rules_path=args.rules,
+            initial_usd=args.initial_usd,
+            symbol=args.symbol,
+            chain=args.chain,
+            out_dir=args.out,
+            fees_bps=args.fees_bps,
+            slippage_bps=args.slippage_bps,
+        )
+    except replay.ReplayError as e:
+        return _failed(str(e))
+    return _ok(result)
+
+
+@_wrap
 def cmd_fetch_data(args: argparse.Namespace) -> int:
     """Fetch OHLCV via onchainos market kline and write a parquet."""
     from scripts import data_fetcher
@@ -142,10 +164,11 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--rules", required=True, help="Path to a PM rules YAML")
     rp.add_argument("--initial-usd", dest="initial_usd", type=float, default=1000.0)
     rp.add_argument("--symbol", default=None, help="Asset symbol (default: derive from parquet)")
+    rp.add_argument("--chain", default="solana", help="Chain (default: solana)")
     rp.add_argument("--out", default=None, help="Run output dir (default: state/runs/<run-id>)")
     rp.add_argument("--fees-bps", dest="fees_bps", type=float, default=30.0)
     rp.add_argument("--slippage-bps", dest="slippage_bps", type=float, default=50.0)
-    rp.set_defaults(_handler=cmd_stub, _stub_name="replay")
+    rp.set_defaults(_handler=cmd_replay)
 
     # cache stats / clear — small helpers
     ca = sub.add_parser("cache", help="Inspect or clear the parquet cache")

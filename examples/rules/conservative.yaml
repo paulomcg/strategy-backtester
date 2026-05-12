@@ -1,0 +1,28 @@
+# Minimal PM rule overlay used by the backtester examples.
+#
+# `universe` is the asset list the agent's strategy may open positions in.
+# Rules: 30% halt-on-portfolio-drawdown, 60% per-position cap (relaxed for
+# single-asset demos), 25% trailing stop on every held position.
+name: backtester-demo-conservative
+wallet: bt-demo
+universe:
+  - { chain: solana, address: "So11111111111111111111111111111111111111112", symbol: WSOL }
+rules:
+  - id: halt-on-portfolio-dd
+    type: halt_on_drawdown
+    threshold_pct: 30
+    action:
+      type: liquidate_all
+      reason: "portfolio drawdown threshold"
+  - id: per-position-cap
+    type: max_position_pct
+    threshold_pct: 60
+    action:
+      type: trim_to
+      target_pct: 60
+  - id: trailing-stop-all
+    type: trailing_stop
+    pct: 25
+    applies_to: "*"
+    action:
+      type: full_exit
