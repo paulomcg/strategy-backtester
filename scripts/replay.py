@@ -216,6 +216,13 @@ def run_replay(
         "cycles": cycle_records[-10:],  # tail only — full audit is in pm-state/
     }
     (out_dir / "run.json").write_text(json.dumps(run_meta, indent=2, default=str))
+
+    if report_ok:
+        try:
+            from . import html_report
+            html_report.emit_html_report(out_dir)
+        except Exception:
+            pass
     return run_meta
 
 

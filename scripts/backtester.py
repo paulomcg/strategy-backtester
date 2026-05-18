@@ -118,6 +118,23 @@ def cmd_pm_check(args: argparse.Namespace) -> int:
 
 
 @_wrap
+def cmd_report_html(args: argparse.Namespace) -> int:
+    """Regenerate report.html for an existing run dir without re-running the backtest."""
+    from scripts import html_report
+
+    run_dir = Path(args.run_dir).expanduser().resolve()
+    if not run_dir.exists():
+        return _failed(f"run_dir_not_found {run_dir}")
+    out = html_report.emit_html_report(run_dir)
+    if out is None:
+        return _failed(
+            "report_html_inputs_missing — need run.json, report/report.json, "
+            "and scripts/report_template.html"
+        )
+    return _ok({"report_html": str(out)})
+
+
+@_wrap
 def cmd_stub(args: argparse.Namespace) -> int:
     name = getattr(args, "_stub_name", "this command")
     return _failed(f"not_implemented {name} ships in a later milestone")
@@ -169,6 +186,14 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--fees-bps", dest="fees_bps", type=float, default=30.0)
     rp.add_argument("--slippage-bps", dest="slippage_bps", type=float, default=50.0)
     rp.set_defaults(_handler=cmd_replay)
+
+    # report-html — regenerate the interactive HTML report for an existing run
+    rh = sub.add_parser(
+        "report-html",
+        help="Render report.html for an existing run dir (no replay)",
+    )
+    rh.add_argument("--run-dir", dest="run_dir", required=True, help="Path to an existing run output dir")
+    rh.set_defaults(_handler=cmd_report_html)
 
     # cache stats / clear — small helpers
     ca = sub.add_parser("cache", help="Inspect or clear the parquet cache")
