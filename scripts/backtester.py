@@ -118,6 +118,94 @@ def cmd_pm_check(args: argparse.Namespace) -> int:
 
 
 @_wrap
+def cmd_cache_stats(args: argparse.Namespace) -> int:  # noqa: ARG001 — no per-cmd args
+    """List cached parquet files: symbol, bar, rows, ts range, disk size."""
+    from scripts import config
+
+    cache_dir = config.cache_dir()
+    entries: list[dict[str, Any]] = []
+    total_bytes = 0
+    total_rows = 0
+    for p in sorted(cache_dir.glob("*.parquet")):
+        try:
+            stat = p.stat()
+            size = stat.st_size
+            total_bytes += size
+            import pandas as pd
+
+            df = pd.read_parquet(p)
+            row_count = len(df)
+            total_rows += row_count
+            ts_min = ts_max = None
+            if "ts" in df.columns and not df.empty:
+                ts_min = str(df["ts"].min())
+                ts_max = str(df["ts"].max())
+            stem = p.stem
+            sym, _, bar = stem.rpartition("-")
+            entries.append({
+                "symbol": sym or stem,
+                "bar": bar or "?",
+                "path": str(p),
+                "rows": row_count,
+                "size_bytes": size,
+                "ts_min": ts_min,
+                "ts_max": ts_max,
+                "mtime": _iso_mtime(stat.st_mtime),
+            })
+        except Exception as e:  # noqa: BLE001 — corrupt parquet shouldn't kill the listing
+            entries.append({"path": str(p), "error": f"{type(e).__name__}: {e}"})
+
+    return _ok({
+        "cache_dir": str(cache_dir),
+        "count": len(entries),
+        "total_rows": total_rows,
+        "total_size_bytes": total_bytes,
+        "entries": entries,
+    })
+
+
+@_wrap
+def cmd_cache_clear(args: argparse.Namespace) -> int:
+    """Delete cached parquets. Requires --all OR (--symbol [--bar]). Refuses to do nothing."""
+    from scripts import config
+
+    cache_dir = config.cache_dir()
+    if not args.all and not args.symbol:
+        return _failed(
+            "cache_clear_no_target — pass --all, or --symbol SYM [--bar BAR]"
+        )
+
+    deleted: list[str] = []
+    if args.all:
+        for p in cache_dir.glob("*.parquet"):
+            try:
+                p.unlink()
+                deleted.append(str(p))
+            except OSError as e:
+                return _failed(f"cache_clear_failed {p}: {e}")
+    else:
+        # Symbol-scoped: optionally bar-scoped too.
+        pattern = (
+            f"{args.symbol}-{args.bar}.parquet"
+            if args.bar
+            else f"{args.symbol}-*.parquet"
+        )
+        for p in cache_dir.glob(pattern):
+            try:
+                p.unlink()
+                deleted.append(str(p))
+            except OSError as e:
+                return _failed(f"cache_clear_failed {p}: {e}")
+    return _ok({"cache_dir": str(cache_dir), "deleted": deleted, "count": len(deleted)})
+
+
+def _iso_mtime(mtime: float) -> str:
+    import datetime as _dt
+
+    return _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).isoformat()
+
+
+@_wrap
 def cmd_report_html(args: argparse.Namespace) -> int:
     """Regenerate report.html for an existing run dir without re-running the backtest."""
     from scripts import html_report
@@ -195,14 +283,19 @@ def build_parser() -> argparse.ArgumentParser:
     rh.add_argument("--run-dir", dest="run_dir", required=True, help="Path to an existing run output dir")
     rh.set_defaults(_handler=cmd_report_html)
 
-    # cache stats / clear — small helpers
+    # cache stats / clear — parquet cache hygiene
     ca = sub.add_parser("cache", help="Inspect or clear the parquet cache")
     ca_sub = ca.add_subparsers(dest="subcmd", required=True)
-    cs = ca_sub.add_parser("stats", help="List cached parquet files")
-    cs.set_defaults(_handler=cmd_stub, _stub_name="cache stats")
-    cc = ca_sub.add_parser("clear", help="Delete cached parquet files")
-    cc.add_argument("--token", default=None)
-    cc.set_defaults(_handler=cmd_stub, _stub_name="cache clear")
+    cs = ca_sub.add_parser("stats", help="List cached parquet files + total disk usage")
+    cs.set_defaults(_handler=cmd_cache_stats)
+    cc = ca_sub.add_parser(
+        "clear",
+        help="Delete cached parquets. --all OR --symbol [--bar].",
+    )
+    cc.add_argument("--all", action="store_true", help="Delete every cached parquet")
+    cc.add_argument("--symbol", default=None, help="Symbol prefix to delete")
+    cc.add_argument("--bar", default=None, help="Bar suffix (only with --symbol)")
+    cc.set_defaults(_handler=cmd_cache_clear)
 
     # list-data
     ld = sub.add_parser("list-data", help="List parquet files in the cache")
