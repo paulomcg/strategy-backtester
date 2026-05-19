@@ -47,16 +47,33 @@ def _wrap(handler: Callable[..., int]) -> Callable[..., int]:
 
 @_wrap
 def cmd_replay(args: argparse.Namespace) -> int:
-    """Replay an OHLCV parquet through PM, one cycle per bar; final pm report."""
+    """Replay one or more OHLCV parquets through PM, then run pm report."""
     from scripts import replay
+
+    # `--ohlcv` may be repeated or comma-separated to drive multi-asset runs.
+    ohlcv_paths: list[Path] = []
+    for raw in (args.ohlcv if isinstance(args.ohlcv, list) else [args.ohlcv]):
+        for part in str(raw).split(","):
+            part = part.strip()
+            if part:
+                ohlcv_paths.append(Path(part))
+
+    symbols: list[str] | None = None
+    if args.symbol:
+        symbols = []
+        for raw in (args.symbol if isinstance(args.symbol, list) else [args.symbol]):
+            for part in str(raw).split(","):
+                part = part.strip()
+                if part:
+                    symbols.append(part)
 
     try:
         result = replay.run_replay(
-            ohlcv_path=args.ohlcv,
+            ohlcv_paths=ohlcv_paths,
             strategy_path=args.strategy,
             rules_path=args.rules,
             initial_usd=args.initial_usd,
-            symbol=args.symbol,
+            symbols=symbols,
             chain=args.chain,
             out_dir=args.out,
             fees_bps=args.fees_bps,
@@ -264,11 +281,17 @@ def build_parser() -> argparse.ArgumentParser:
         "replay",
         help="Replay historical OHLCV through PM (cycle-by-cycle subprocess driver)",
     )
-    rp.add_argument("--ohlcv", required=True, help="Parquet OHLCV path")
+    rp.add_argument(
+        "--ohlcv", required=True, action="append",
+        help="Parquet OHLCV path. Repeat or comma-separate for multi-asset.",
+    )
     rp.add_argument("--strategy", required=True, help="Path to a PM strategy .py")
     rp.add_argument("--rules", required=True, help="Path to a PM rules YAML")
     rp.add_argument("--initial-usd", dest="initial_usd", type=float, default=1000.0)
-    rp.add_argument("--symbol", default=None, help="Asset symbol (default: derive from parquet)")
+    rp.add_argument(
+        "--symbol", default=None, action="append",
+        help="Asset symbol. Repeat or comma-separate; defaults to each parquet's stem.",
+    )
     rp.add_argument("--chain", default="solana", help="Chain (default: solana)")
     rp.add_argument("--out", default=None, help="Run output dir (default: state/runs/<run-id>)")
     rp.add_argument("--fees-bps", dest="fees_bps", type=float, default=30.0)
