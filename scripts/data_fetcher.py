@@ -26,11 +26,12 @@ class DataFetchError(Exception):
     """First word maps to a canonical FAILED token, e.g. 'data_fetch_failed'."""
 
 
-# OKX-DEX kline cap per response — verified against the docs in the planning
-# session. We page via --after to walk further back than 299 bars.
+# OKX-DEX kline cap per response — 299 is the hard server-side limit.
+# The CLI no longer accepts an --after cursor (verified 2026-05-19), so each
+# fetch is single-page. Re-running the fetch later yields the latest 299
+# bars at the requested bar size; older history is unrecoverable.
 KLINE_PAGE_SIZE = 299
-# Hard upper bound — OKX docs cap historical depth at ~1440 entries per token.
-KLINE_HARD_CAP = 1440
+KLINE_HARD_CAP = KLINE_PAGE_SIZE
 
 
 # ---------------------------------------------------------------------------
@@ -107,56 +108,32 @@ def _walk_kline(
     token: str,
     chain: str,
     bar: str,
-    start: str | None,
-    end: str | None,
+    start: str | None,  # noqa: ARG001 — kept for caller compat; trimmed in fetch()
+    end: str | None,    # noqa: ARG001
 ) -> tuple[list[dict[str, Any]], int]:
-    """Page through `onchainos market kline` until we hit the cap or no new bars.
+    """Fetch a single page of up to KLINE_PAGE_SIZE bars.
 
-    Returns (deduped_bars, api_calls).
+    The CLI's `--after` cursor was removed; pagination isn't available.
+    Returns (deduped_bars, api_calls). Caller filters by --start/--end.
     """
-    bars: list[dict[str, Any]] = []
+    argv = [
+        cli_bin, "market", "kline",
+        "--chain", chain,
+        "--address", token,
+        "--bar", bar,
+        "--limit", str(KLINE_PAGE_SIZE),
+    ]
+    payload = _run_json(argv)
+    bars = _candles_from_payload(payload)
+    # Server returns newest-first; dedup defensively in case of repeats.
     seen_ts: set[str] = set()
-    api_calls = 0
-    after_cursor: str | None = None  # ts (string) — bars older than this
-
-    while len(bars) < KLINE_HARD_CAP:
-        argv = [
-            cli_bin, "market", "kline",
-            "--chain", chain,
-            "--address", token,
-            "--bar", bar,
-            "--limit", str(KLINE_PAGE_SIZE),
-        ]
-        if after_cursor is not None:
-            argv.extend(["--after", after_cursor])
-
-        api_calls += 1
-        payload = _run_json(argv)
-        new_bars = _candles_from_payload(payload)
-        if not new_bars:
-            break
-
-        added = 0
-        for b in new_bars:
-            if b["ts"] in seen_ts:
-                continue
-            seen_ts.add(b["ts"])
-            bars.append(b)
-            added += 1
-        if added == 0:
-            # API returned only duplicates — we've drained the window.
-            break
-
-        # Move cursor to the OLDEST ts we just received so the next page
-        # walks further back in time.
-        oldest = min(new_bars, key=lambda b: b["ts"])
-        after_cursor = oldest["ts"]
-
-        # Early exit: if --start was provided and we've crossed it, stop.
-        if start and oldest["ts"] < _to_ms_string(start):
-            break
-
-    return bars, api_calls
+    deduped: list[dict[str, Any]] = []
+    for b in bars:
+        if b["ts"] in seen_ts:
+            continue
+        seen_ts.add(b["ts"])
+        deduped.append(b)
+    return deduped, 1
 
 
 def _run_json(argv: list[str], timeout: int = 30) -> Any:
