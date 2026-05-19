@@ -89,6 +89,9 @@ def run_replay(
         initial_usd, wallet_address=f"bt-{run_id[:8]}", chain=chain,
     )
     pm_env = _build_pm_env(pm_state_dir)
+    # Forward simulator cost overrides to PM's SyntheticSwapExecutor.
+    pm_env["PM_SYNTHETIC_FEE_BPS"] = str(fees_bps)
+    pm_env["PM_SYNTHETIC_SLIPPAGE_BPS"] = str(slippage_bps)
 
     # Per-bar history accumulates (PM strategies receive prior bars).
     history: list[dict[str, Any]] = []
