@@ -1,5 +1,10 @@
 # strategy-backtester
 
+> **OKX Agentic Trading Contest, Skill Quality Award submission** — see
+> [`SUBMISSION.md`](./SUBMISSION.md) for the explicit mapping of features
+> to the five evaluation criteria (strategy completeness, risk control,
+> execution reliability, user safety/onboarding, observability).
+
 **A thin OKX environment mock that drives `portfolio-manager` through
 historical OHLCV.** The user/agent authors a Python `decide()` callback;
 the backtester replays bars one at a time, feeds PM the same data shapes
