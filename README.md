@@ -13,139 +13,73 @@ One artifact, two execution contexts.
 
 ---
 
-## What you can do with it
+## What you can ask the agent to do
 
-### Backtest a momentum strategy on real Solana OHLCV
+Natural-language prompts and what the agent does with them:
 
-```sh
-# 1. Pull a year of WSOL daily bars from OKX kline (cached to parquet)
-backtester fetch-data \
-  --token So11111111111111111111111111111111111111112 \
-  --chain solana --bar 1D \
-  --start 2025-05-12 --end 2026-05-12 \
-  --symbol WSOL \
-  --out ./examples/ohlcv/wsol-1y.parquet
+### "Backtest my momentum strategy on a year of WSOL data"
 
-# 2. Replay your strategy against it
-backtester replay \
-  --ohlcv ./examples/ohlcv/wsol-1y.parquet \
-  --strategy examples/strategies/momentum_threshold.py \
-  --rules examples/rules/conservative.yaml \
-  --initial-usd 1000 --symbol WSOL \
-  --fees-bps 30 --slippage-bps 50
-```
+Agent grabs the user's strategy `.py` + rules `.yaml`, fetches a year
+of WSOL 1H bars via OnChainOS kline (cached to parquet so the next
+backtest is free), runs the replay loop bar-by-bar through `pm
+watch`, captures every fill into a simulated wallet, then calls
+`pm report` against the resulting audit. User gets back the
+headline metrics (Sharpe / Sortino / max DD / win rate / total
+return / CAGR / expectancy) plus an interactive HTML report they
+can open in any browser.
 
-Output — one JSON record per replay run, with every fill captured:
+### "How does buy-and-hold compare to my DCA on the same window?"
 
-```json
-{"ok": true, "result": {
-  "run_id": "20260520T125805Z-1ccf95",
-  "bars_processed": 299,
-  "fills_total": 23,
-  "pm_call_failures": 0,
-  "final_equity_usd": 961.02,
-  "report_summary": {
-    "metrics_summary": {
-      "total_return_pct": -3.61,
-      "sharpe": -3.36,
-      "max_drawdown_pct": 8.98
-    }
-  },
-  "report_path": "./state/runs/20260520T125805Z-1ccf95/report/report.json"
-}}
-```
+Two replay runs against the same OHLCV parquet, one with the user's
+DCA strategy and one with the bundled `buy_and_hold_wsol.py`. Agent
+diffs the metrics from each `report.json` and surfaces the head-to-
+head: total return, max DD, Sharpe, fills count. No human-readable
+report-shuffling — the agent eats its own JSON.
 
-### Backtest multi-asset portfolios with intersection-of-timestamps replay
+### "Show me what happened in that backtest"
 
-```sh
-backtester replay \
-  --ohlcv ./cache/JTO-1H.parquet,./cache/JUP-1H.parquet \
-  --symbol JTO,JUP \
-  --strategy ./mtf_momentum.py \
-  --rules examples/rules/conservative.yaml \
-  --initial-usd 5000 \
-  --fees-bps 30 --slippage-bps 50
-```
+Each replay run writes a self-contained `report.html` (React +
+Recharts, single file, no server). Agent opens it for the user — or
+serves it on the tailnet via `python -m http.server` so the user can
+view from any device. Equity curve with drawdown shade, fills
+timeline with color-coded buy/sell/exit badges, per-asset realized-
+PnL attribution, per-cycle decision trace. A committed demo lives
+at `examples/demo-run/report.html` for previews without running
+anything.
 
-The replayer walks the intersection of all asset timestamps so the
-strategy gets a consistent multi-asset cross-section every bar.
+### "Backtest a multi-asset rotation on JTO + JUP"
 
-### Open the interactive HTML report
+User provides one `.py` strategy that consumes `market_data['JTO']`
++ `market_data['JUP']`; agent points the backtester at two parquet
+files in parallel and the replay loop walks the intersection of
+timestamps so the strategy sees a consistent cross-section each bar.
 
-Every run writes a self-contained `report.html` to the output dir:
+### "Run this same strategy live"
 
-```sh
-open ./state/runs/20260520T125805Z-1ccf95/report/report.html
-```
+The strategy `.py` the user backtested IS the artifact for live
+deployment. The agent hands it to the companion
+[`portfolio-manager`](https://github.com/paulomcg/portfolio-manager)
+skill (`pm watch --strategy <same.py>`). PM doesn't know it was
+backtested; the backtester didn't know it was simulated. One
+artifact, two execution contexts.
 
-React + Recharts single-file bundle — equity curve with drawdown
-shade, fills timeline with color-coded buy/sell badges, per-asset
-realized-PnL attribution, the full per-cycle decision trace. No
-server, no build step, opens in any browser.
+### "Fetch a year of historical kline for WBTC on Base"
 
-A committed demo lives at
-[`examples/demo-run/report.html`](examples/demo-run/report.html) so
-you can preview without running anything.
+Agent invokes `backtester fetch-data --token <addr> --chain base
+--bar 1D --start ... --end ...` which streams the kline data via
+OnChainOS `market kline` into a parquet on disk. Subsequent
+backtests on the same `(token, chain, bar)` triple hit the cache
+(zero API calls). The user can ask for parquet stats anytime:
+"how much kline do I have cached?"
 
-### Compare a strategy to a hold-baseline
+### "Re-render the HTML report for last week's run"
 
-```sh
-# Strategy run
-backtester replay --strategy ./my-dca.py --rules rules.yaml \
-  --ohlcv wsol-1y.parquet --initial-usd 1000 \
-  --out ./runs/dca
+Agent finds the run dir, calls `backtester report-html --run-dir
+<path>`, and opens the freshly-rendered single-file bundle. Useful
+when the report template has improved since the original run — no
+need to re-burn the OHLCV.
 
-# Buy-and-hold reference
-backtester replay --strategy examples/strategies/buy_and_hold_wsol.py \
-  --rules examples/rules/conservative.yaml \
-  --ohlcv wsol-1y.parquet --initial-usd 1000 \
-  --out ./runs/hold
-
-# Diff the metrics
-diff <(jq .metrics_summary ./runs/dca/report.json) \
-     <(jq .metrics_summary ./runs/hold/report.json)
-```
-
-### Use the SAME strategy live without re-authoring
-
-```sh
-# BACKTEST
-backtester replay --strategy ./dca-wsol.py --rules ./rules.yaml \
-                  --ohlcv ./wsol-1y.parquet --initial-usd 1000
-
-# LIVE (same .py + .yaml)
-pm watch --strategy ./dca-wsol.py --rules ./rules.yaml \
-         --wallet <real-addr> --live --max-loss-usd 50
-```
-
-The strategy file doesn't know it's running against historical or live
-data. PM doesn't know whose wallet snapshot it's reading. The
-backtester is just a smart driver.
-
-### Inspect + manage the OHLCV cache
-
-```sh
-backtester cache stats
-```
-
-```json
-{"ok": true, "result": {
-  "count": 4,
-  "total_rows": 1798,
-  "total_size_bytes": 122_456,
-  "entries": [
-    {"symbol": "WSOL", "bar": "1H", "rows": 720, "ts_min": "...", "ts_max": "..."}
-  ]
-}}
-```
-
-Re-render an interactive HTML report for an older run without re-running:
-
-```sh
-backtester report-html --run-dir ./state/runs/20260520T125805Z-1ccf95
-```
-
-### Use it from Claude Code / Codex / a custom agent
+### Integration paths (Claude Code, Codex, custom agents)
 
 | Method | Path |
 |---|---|
@@ -155,7 +89,9 @@ backtester report-html --run-dir ./state/runs/20260520T125805Z-1ccf95
 
 Every command emits `{"ok": bool, "result": {...}}` JSON on stdout.
 Errors print `FAILED: <category> <detail>` to stderr with stable
-machine-parseable categories.
+machine-parseable categories. The companion `portfolio-manager`
+skill must be installed first — the backtester subprocess-drives
+`pm` per bar, so its `bin/` must be on PATH.
 
 ---
 
