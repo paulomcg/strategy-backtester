@@ -197,7 +197,6 @@ the run — the loop keeps going across them.
 | `scripts/replay.py` | Replay loop — drives PM per bar, captures fills, rewrites audit timestamps |
 | `scripts/data_fetcher.py` | `onchainos market kline` → parquet cache |
 | `scripts/sim_wallet.py` | In-memory ledger that mimics OnChainOS wallet responses |
-| `scripts/html_report.py` | Renders the interactive single-file HTML report |
 | `scripts/config.py` | Paths overridable via env vars |
 | `examples/demo-run/` | Pre-computed demo run output (run summary + per-cycle audit) |
 | `examples/ohlcv/` | Sample parquet files (SOL/JTO/JUP) for offline runs |
