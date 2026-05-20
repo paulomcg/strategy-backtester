@@ -15,69 +15,84 @@ One artifact, two execution contexts.
 
 ## What you can ask the agent to do
 
-Natural-language prompts and what the agent does with them:
+Natural-language prompts the user says, and what the agent does with
+them.
 
-### "Backtest my momentum strategy on a year of WSOL data"
+---
 
-Agent grabs the user's strategy `.py` + rules `.yaml`, fetches a year
-of WSOL 1H bars via OnChainOS kline (cached to parquet so the next
-backtest is free), runs the replay loop bar-by-bar through `pm
-watch`, captures every fill into a simulated wallet, then calls
-`pm report` against the resulting audit. User gets back the
+> **"Backtest my momentum strategy on a year of WSOL data."**
+
+The agent grabs the user's strategy `.py` + rules `.yaml`, fetches
+a year of WSOL 1H bars via OnChainOS kline (cached to parquet so
+the next backtest is free), runs the replay loop bar-by-bar through
+`pm watch`, captures every fill into a simulated wallet, then calls
+`pm report` against the resulting audit. The user gets back the
 headline metrics (Sharpe / Sortino / max DD / win rate / total
 return / CAGR / expectancy) plus an interactive HTML report they
 can open in any browser.
 
-### "How does buy-and-hold compare to my DCA on the same window?"
+---
 
-Two replay runs against the same OHLCV parquet, one with the user's
-DCA strategy and one with the bundled `buy_and_hold_wsol.py`. Agent
-diffs the metrics from each `report.json` and surfaces the head-to-
-head: total return, max DD, Sharpe, fills count. No human-readable
-report-shuffling — the agent eats its own JSON.
+> **"How does buy-and-hold compare to my DCA on the same window?"**
 
-### "Show me what happened in that backtest"
+Two replay runs against the same OHLCV parquet — one with the
+user's DCA strategy, one with the bundled `buy_and_hold_wsol.py`.
+The agent diffs the metrics from each `report.json` and surfaces
+the head-to-head: total return, max DD, Sharpe, fills count. No
+human-readable report-shuffling — the agent eats its own JSON.
 
-Each replay run writes a self-contained `report.html` (React +
-Recharts, single file, no server). Agent opens it for the user — or
-serves it on the tailnet via `python -m http.server` so the user can
-view from any device. Equity curve with drawdown shade, fills
-timeline with color-coded buy/sell/exit badges, per-asset realized-
-PnL attribution, per-cycle decision trace. A committed demo lives
-at `examples/demo-run/report.html` for previews without running
-anything.
+---
 
-### "Backtest a multi-asset rotation on JTO + JUP"
+> **"Show me what happened in that backtest."**
 
-User provides one `.py` strategy that consumes `market_data['JTO']`
-+ `market_data['JUP']`; agent points the backtester at two parquet
-files in parallel and the replay loop walks the intersection of
-timestamps so the strategy sees a consistent cross-section each bar.
+Every replay run writes a self-contained `report.html` (React +
+Recharts, single file, no server). The agent opens it for the user
+— or serves it on the tailnet via `python -m http.server` so the
+user can view from any device. Equity curve with drawdown shade,
+fills timeline with color-coded buy/sell/exit badges, per-asset
+realized-PnL attribution, per-cycle decision trace. A committed
+demo lives at `examples/demo-run/report.html` for previews without
+running anything.
 
-### "Run this same strategy live"
+---
+
+> **"Backtest a multi-asset rotation on JTO + JUP."**
+
+User provides one `.py` strategy that consumes
+`market_data['JTO']` + `market_data['JUP']`; the agent points the
+backtester at two parquet files in parallel. The replay loop walks
+the intersection of timestamps so the strategy sees a consistent
+cross-section each bar.
+
+---
+
+> **"Run this same strategy live."**
 
 The strategy `.py` the user backtested IS the artifact for live
 deployment. The agent hands it to the companion
 [`portfolio-manager`](https://github.com/paulomcg/portfolio-manager)
-skill (`pm watch --strategy <same.py>`). PM doesn't know it was
-backtested; the backtester didn't know it was simulated. One
-artifact, two execution contexts.
+skill. PM doesn't know it was backtested; the backtester didn't
+know it was simulated. One artifact, two execution contexts.
 
-### "Fetch a year of historical kline for WBTC on Base"
+---
 
-Agent invokes `backtester fetch-data --token <addr> --chain base
---bar 1D --start ... --end ...` which streams the kline data via
-OnChainOS `market kline` into a parquet on disk. Subsequent
-backtests on the same `(token, chain, bar)` triple hit the cache
-(zero API calls). The user can ask for parquet stats anytime:
-"how much kline do I have cached?"
+> **"Fetch a year of historical kline for WBTC on Base."**
 
-### "Re-render the HTML report for last week's run"
+The agent invokes `backtester fetch-data`, which streams the kline
+data via OnChainOS `market kline` into a parquet on disk.
+Subsequent backtests on the same `(token, chain, bar)` triple hit
+the cache (zero API calls). The user can ask for parquet stats
+anytime: *"how much kline do I have cached?"*
 
-Agent finds the run dir, calls `backtester report-html --run-dir
-<path>`, and opens the freshly-rendered single-file bundle. Useful
-when the report template has improved since the original run — no
-need to re-burn the OHLCV.
+---
+
+> **"Re-render the HTML report for last week's run."**
+
+The agent finds the run dir and re-renders the single-file bundle
+against the current report template. Useful when the template has
+improved since the original run — no need to re-burn the OHLCV.
+
+---
 
 ### Integration paths (Claude Code, Codex, custom agents)
 
