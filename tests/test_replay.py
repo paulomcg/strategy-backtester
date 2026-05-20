@@ -49,7 +49,7 @@ class TestInputValidation:
     def test_missing_ohlcv_raises(self, tmp_path):
         with pytest.raises(ReplayError, match="ohlcv not found"):
             replay.run_replay(
-                ohlcv_path=tmp_path / "nope.parquet",
+                ohlcv_paths=[tmp_path / "nope.parquet"],
                 strategy_path=EXAMPLES / "strategies" / "buy_and_hold_wsol.py",
                 rules_path=EXAMPLES / "rules" / "conservative.yaml",
             )
@@ -58,7 +58,7 @@ class TestInputValidation:
         ohlcv = _make_synthetic_parquet(tmp_path, [100, 101])
         with pytest.raises(ReplayError, match="strategy not found"):
             replay.run_replay(
-                ohlcv_path=ohlcv,
+                ohlcv_paths=[ohlcv],
                 strategy_path=tmp_path / "nope.py",
                 rules_path=EXAMPLES / "rules" / "conservative.yaml",
             )
@@ -67,7 +67,7 @@ class TestInputValidation:
         ohlcv = _make_synthetic_parquet(tmp_path, [100, 101])
         with pytest.raises(ReplayError, match="rules not found"):
             replay.run_replay(
-                ohlcv_path=ohlcv,
+                ohlcv_paths=[ohlcv],
                 strategy_path=EXAMPLES / "strategies" / "buy_and_hold_wsol.py",
                 rules_path=tmp_path / "nope.yaml",
             )

@@ -56,7 +56,9 @@ class TestFetchSingleCall:
             )
         assert result["ok"] is True
         assert result["rows"] == 3
-        assert result["api_calls"] == 2  # one to get bars, one that returned dupes (loop end)
+        # Single-call fetch (the --after pagination path was retired in
+        # commit aca75da; OnChainOS no longer accepts --after on kline)
+        assert result["api_calls"] == 1
         assert Path(result["path"]).exists()
         df = pd.read_parquet(result["path"])
         assert list(df["c"]) == [100.0, 101.0, 102.0]
@@ -87,41 +89,11 @@ class TestFetchSingleCall:
         assert list(df["c"]) == [200.0]
 
 
-# ---------------------------------------------------------------------------
-# Pagination + dedup
-# ---------------------------------------------------------------------------
-
-
-class TestPagination:
-    def test_paginates_until_duplicates(self):
-        # First call: 3 fresh bars. Second call: same bars again (dedup → 0 added → loop exits).
-        responses = iter([
-            _completed(_kline_payload([100, 101, 102], start_ms=1735689600000)),
-            _completed(_kline_payload([100, 101, 102], start_ms=1735689600000)),
-        ])
-        with patch("subprocess.run", side_effect=lambda *a, **k: next(responses)):
-            result = data_fetcher.fetch(token="X", chain="solana", bar="1D", symbol="X1")
-        assert result["rows"] == 3
-        assert result["api_calls"] == 2
-
-    def test_paginates_through_multiple_windows(self):
-        # First call: Jan 2, 3, 4 (closes [110, 111, 112]).
-        # Second call: Jan 1, 2, 3 (closes [100, 101, 102]) — Jan 2/3 are dups
-        # (older Jan 1 is the only addition). Third call: same → 0 added,
-        # loop exits.
-        responses = iter([
-            _completed(_kline_payload([110, 111, 112], start_ms=1735776000000)),
-            _completed(_kline_payload([100, 101, 102], start_ms=1735689600000)),
-            _completed(_kline_payload([100, 101, 102], start_ms=1735689600000)),
-        ])
-        with patch("subprocess.run", side_effect=lambda *a, **k: next(responses)):
-            result = data_fetcher.fetch(token="X", chain="solana", bar="1D", symbol="X1")
-        df = pd.read_parquet(result["path"])
-        # 4 unique timestamps total (Jan 1, 2, 3, 4)
-        assert len(df) == 4
-        # First-occurrence-wins: Jan 2/3 keep first call's prices (110/111),
-        # Jan 1 picked up from second call (100), Jan 4 from first (112).
-        assert sorted(df["c"]) == [100.0, 110.0, 111.0, 112.0]
+# Pagination tests were removed when commit aca75da retired the
+# `--after` cursor path — OnChainOS no longer accepts it on kline, so
+# fetch is single-call by design. Window-aware fetch (merging new
+# data into an existing parquet) is a v0.2 feature; tests will land
+# alongside it.
 
 
 # ---------------------------------------------------------------------------
