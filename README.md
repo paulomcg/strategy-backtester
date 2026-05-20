@@ -45,11 +45,17 @@ human-readable report-shuffling — the agent eats its own JSON.
 
 > **"Show me what happened in that backtest."**
 
-The agent reads the per-cycle JSONL audit produced by the run and
-walks the user through it: every fill (action, asset, qty, price,
-realized PnL), every rule that fired, the equity at each cycle,
-and the drawdown path. All structured data — the agent can summarize
-at any altitude the user asks for.
+Every replay run writes a self-contained interactive HTML report
+(React + Recharts, single file, no server, no build step). The
+agent opens it directly in the user's browser — or serves it on
+the tailnet so the user can view from any device.
+
+Equity curve with drawdown shading, fills timeline with color-coded
+buy/sell/exit badges, per-asset realized-PnL attribution, full
+per-cycle decision trace. See the [Reports](#reports) section below
+for a walkthrough, and the bundled
+[`examples/demo-run/`](examples/demo-run/) for a pre-computed run
+you can preview without running anything.
 
 ---
 
@@ -60,6 +66,14 @@ User provides one `.py` strategy that consumes
 backtester at two parquet files in parallel. The replay loop walks
 the intersection of timestamps so the strategy sees a consistent
 cross-section each bar.
+
+---
+
+> **"Re-render the HTML report for last week's run."**
+
+The agent finds the run dir and re-renders the single-file bundle
+against the current report template. Useful when the template has
+improved since the original run — no need to re-burn the OHLCV.
 
 ---
 
@@ -80,6 +94,50 @@ data via OnChainOS `market kline` into a parquet on disk.
 Subsequent backtests on the same `(token, chain, bar)` triple hit
 the cache (zero API calls). The user can ask for parquet stats
 anytime: *"how much kline do I have cached?"*
+
+---
+
+## Reports
+
+Every replay run writes its output to a self-contained dir at
+`state/runs/<run-id>/report/`:
+
+```
+report/
+├── report.html      ← interactive single-file React bundle (~700KB)
+├── report.json      ← computed metrics + every fill + cycle equity series
+├── report.md        ← human-readable summary
+└── equity.png       ← static equity curve with drawdown shading
+```
+
+`report.html` is the headline artifact. Open it in any browser:
+
+```sh
+open state/runs/<run-id>/report/report.html
+# or serve over tailnet:
+python3 -m http.server 7778 --directory state/runs/
+```
+
+What you see:
+
+- **Headline metrics card** — initial / final equity, total return,
+  CAGR, Sharpe, Sortino, Calmar, max drawdown, win rate, expectancy.
+- **Equity curve** — line chart with shaded drawdown regions; hover
+  for the value + drawdown at any timestamp.
+- **Fills timeline** — chronological list of every buy / sell /
+  exit / trim with action color-coding, qty, fill price, and
+  realized PnL.
+- **Per-asset attribution** — breaks total realized PnL down by
+  asset so you see which legs of a multi-asset strategy actually
+  contributed.
+- **Per-cycle decision trace** — what the rule engine evaluated
+  on each bar, which rules fired (or didn't), which fills happened.
+  Drill-down for debugging why a backtest behaved the way it did.
+
+A pre-computed demo lives at
+[`examples/demo-run/`](examples/demo-run/) — 299 bars of 1H WSOL
+under buy-and-hold with a 25% trailing stop. Open the `report.html`
+to see the full report shape without running anything yourself.
 
 ---
 
@@ -193,12 +251,13 @@ the run — the loop keeps going across them.
 
 | File | Role |
 |---|---|
-| `scripts/backtester.py` | CLI dispatcher (`replay`, `fetch-data`, `cache stats/clear`, `pm-check`) |
+| `scripts/backtester.py` | CLI dispatcher (`replay`, `fetch-data`, `cache stats/clear`, `report-html`, `pm-check`) |
 | `scripts/replay.py` | Replay loop — drives PM per bar, captures fills, rewrites audit timestamps |
 | `scripts/data_fetcher.py` | `onchainos market kline` → parquet cache |
 | `scripts/sim_wallet.py` | In-memory ledger that mimics OnChainOS wallet responses |
+| `scripts/html_report.py` | Renders the interactive single-file HTML report (React + Recharts) |
 | `scripts/config.py` | Paths overridable via env vars |
-| `examples/demo-run/` | Pre-computed demo run output (run summary + per-cycle audit) |
+| `examples/demo-run/` | Pre-computed demo report.html + report.json + equity.png |
 | `examples/ohlcv/` | Sample parquet files (SOL/JTO/JUP) for offline runs |
 | `examples/rules/` | Sample rule configs to drive PM with |
 
