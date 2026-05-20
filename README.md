@@ -99,6 +99,8 @@ anytime: *"how much kline do I have cached?"*
 
 ## Reports
 
+<img width="1376" height="1032" alt="report" src="https://github.com/user-attachments/assets/c44d1266-862f-4c9d-b2d3-35e6d2d1ae73" />
+
 Every replay run writes its output to a self-contained dir at
 `state/runs/<run-id>/report/`:
 
