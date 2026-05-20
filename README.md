@@ -92,19 +92,34 @@ npx skills add okx/plugin-store --skill strategy-backtester
 ```sh
 # Install portfolio-manager first (the backtester depends on `pm` on PATH)
 git clone https://github.com/paulomcg/portfolio-manager.git ~/Projects/portfolio-manager
-cd ~/Projects/portfolio-manager
-python3 -m venv .venv && .venv/bin/pip install jsonschema pyyaml pytest pandas numpy matplotlib pyarrow
+cd ~/Projects/portfolio-manager && ./install.sh
 echo 'export PATH="$HOME/Projects/portfolio-manager/bin:$PATH"' >> ~/.bashrc
 
 # Then the backtester
 git clone https://github.com/paulomcg/strategy-backtester.git ~/Projects/strategy-backtester
-cd ~/Projects/strategy-backtester
-python3 -m venv .venv && .venv/bin/pip install pandas numpy pyarrow pytest pyyaml
+cd ~/Projects/strategy-backtester && ./install.sh
 echo 'export PATH="$HOME/Projects/strategy-backtester/bin:$PATH"' >> ~/.bashrc
 
 # Verify
 backtester pm-check
 ```
+
+### Using this skill from an agent (Claude / Codex / etc.)
+
+Same conventions as the companion `portfolio-manager` skill:
+
+| Method | Path |
+|---|---|
+| Drop into Claude Code's skills dir | `cp -r . ~/.claude/skills/strategy-backtester/` then restart Claude |
+| Point a custom agent at the SKILL.md | parse YAML frontmatter; shell out to `bin/backtester` per command |
+| Register with the OKX Plugin Store | `plugin.yaml` carries the manifest (schema_version: 1) |
+
+Every CLI command emits `{"ok": bool, "result": {...}}` JSON envelopes
+on stdout. Errors print `FAILED: <category> <detail>` to stderr. The
+companion `portfolio-manager` skill MUST be installed first — the
+backtester subprocess-drives `pm` per bar, so its `bin/` must be on
+PATH. See `SKILL.md` for the full schema and the programmatic
+embedding examples.
 
 For `fetch-data` against real OKX kline data, you'll also need:
 

@@ -1,0 +1,5 @@
+# Pinned runtime dependencies for strategy-backtester.
+
+pyyaml>=6.0
+pandas>=2.0
+pyarrow>=14.0     # parquet read/write for OHLCV cache
