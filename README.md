@@ -25,11 +25,11 @@ them.
 The agent grabs the user's strategy `.py` + rules `.yaml`, fetches
 a year of WSOL 1H bars via OnChainOS kline (cached to parquet so
 the next backtest is free), runs the replay loop bar-by-bar through
-`pm watch`, captures every fill into a simulated wallet, then calls
-`pm report` against the resulting audit. The user gets back the
-headline metrics (Sharpe / Sortino / max DD / win rate / total
-return / CAGR / expectancy) plus an interactive HTML report they
-can open in any browser.
+`pm watch`, captures every fill into a simulated wallet, then runs
+the metrics engine against the resulting audit. The user gets back
+the headline numbers — Sharpe, Sortino, max DD, win rate, total
+return, CAGR, expectancy — plus the per-cycle decision trace if
+they want to drill in.
 
 ---
 
@@ -45,14 +45,11 @@ human-readable report-shuffling — the agent eats its own JSON.
 
 > **"Show me what happened in that backtest."**
 
-Every replay run writes a self-contained `report.html` (React +
-Recharts, single file, no server). The agent opens it for the user
-— or serves it on the tailnet via `python -m http.server` so the
-user can view from any device. Equity curve with drawdown shade,
-fills timeline with color-coded buy/sell/exit badges, per-asset
-realized-PnL attribution, per-cycle decision trace. A committed
-demo lives at `examples/demo-run/report.html` for previews without
-running anything.
+The agent reads the per-cycle JSONL audit produced by the run and
+walks the user through it: every fill (action, asset, qty, price,
+realized PnL), every rule that fired, the equity at each cycle,
+and the drawdown path. All structured data — the agent can summarize
+at any altitude the user asks for.
 
 ---
 
@@ -86,30 +83,6 @@ anytime: *"how much kline do I have cached?"*
 
 ---
 
-> **"Re-render the HTML report for last week's run."**
-
-The agent finds the run dir and re-renders the single-file bundle
-against the current report template. Useful when the template has
-improved since the original run — no need to re-burn the OHLCV.
-
----
-
-### Integration paths (Claude Code, Codex, custom agents)
-
-| Method | Path |
-|---|---|
-| Drop into Claude Code's skills dir | `cp -r . ~/.claude/skills/strategy-backtester/` then restart Claude |
-| Point a custom agent at SKILL.md | parse YAML frontmatter; shell out to `bin/backtester` per command |
-| Register with the OKX Plugin Store | `plugin.yaml` schema_version: 1 |
-
-Every command emits `{"ok": bool, "result": {...}}` JSON on stdout.
-Errors print `FAILED: <category> <detail>` to stderr with stable
-machine-parseable categories. The companion `portfolio-manager`
-skill must be installed first — the backtester subprocess-drives
-`pm` per bar, so its `bin/` must be on PATH.
-
----
-
 ## Install
 
 ```sh
@@ -136,6 +109,20 @@ export OKX_API_KEY=... OKX_SECRET_KEY=... OKX_PASSPHRASE=...
 The backtester itself never reads those env vars — they're consumed by
 the underlying `onchainos market kline` CLI when `fetch-data` invokes
 it.
+
+### Wiring into an agent (Claude Code, Codex, custom harness)
+
+| Method | Path |
+|---|---|
+| Drop into Claude Code's skills dir | `cp -r . ~/.claude/skills/strategy-backtester/` then restart Claude |
+| Point a custom agent at SKILL.md | parse YAML frontmatter; shell out to `bin/backtester` per command |
+| Register with the OKX Plugin Store | `plugin.yaml` schema_version: 1 |
+
+Every command emits `{"ok": bool, "result": {...}}` JSON on stdout.
+Errors print `FAILED: <category> <detail>` to stderr with stable
+machine-parseable categories. The companion `portfolio-manager`
+skill must be installed first — the backtester subprocess-drives
+`pm` per bar, so its `bin/` must be on PATH.
 
 ---
 
@@ -206,13 +193,13 @@ the run — the loop keeps going across them.
 
 | File | Role |
 |---|---|
-| `scripts/backtester.py` | CLI dispatcher (`replay`, `fetch-data`, `cache stats/clear`, `report-html`, `pm-check`) |
+| `scripts/backtester.py` | CLI dispatcher (`replay`, `fetch-data`, `cache stats/clear`, `pm-check`) |
 | `scripts/replay.py` | Replay loop — drives PM per bar, captures fills, rewrites audit timestamps |
 | `scripts/data_fetcher.py` | `onchainos market kline` → parquet cache |
 | `scripts/sim_wallet.py` | In-memory ledger that mimics OnChainOS wallet responses |
 | `scripts/html_report.py` | Renders the interactive single-file HTML report |
 | `scripts/config.py` | Paths overridable via env vars |
-| `examples/demo-run/` | Pre-rendered demo report (open `report.html` in a browser) |
+| `examples/demo-run/` | Pre-computed demo run output (run summary + per-cycle audit) |
 | `examples/ohlcv/` | Sample parquet files (SOL/JTO/JUP) for offline runs |
 | `examples/rules/` | Sample rule configs to drive PM with |
 
